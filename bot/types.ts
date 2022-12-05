@@ -10,6 +10,8 @@ export interface Ranking {
 export interface Apartment {
   humanized_rent: string
   id: number
+  number: number
+  stair: string
   large_plan_image: string
   plan_type: string
   rank: number
@@ -20,7 +22,11 @@ export interface Apartment {
   building: {
     id: number
     street_address: string
-
+  }
+  apartment_queue: {
+    id: number
+    name: string
+    status: string
   }
 
 }

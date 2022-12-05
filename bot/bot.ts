@@ -74,14 +74,14 @@ void Promise.all([
           filename.endsWith('.json')
             ? {
                 filename,
-                content: await fs.promises.readFile(`./file/ranking/${filename}`)
+                content: await fs.promises.readFile(`./data/ranking/${filename}`)
               }
             : null))).filter(v => v !== null))
       .then((files) => {
         // can't be null
         // @ts-expect-error
         // eslint-disable-next-line no-return-assign
-        files.forEach(f => oldRanking[f.filename] = JSON.parse(f.content.toString()))
+        files.forEach(f => oldRanking[f.filename.split('.')[0]] = JSON.parse(f.content.toString()))
         resolve()
       })
       .catch((r) => {
@@ -105,6 +105,7 @@ async function mainLoop (): Promise<void> {
       for (const applicationId of applicationIds) {
         logger.log(`Running check for application ${applicationId}`)
         await check(applicationId, cookie)
+        await sleep(1300)
       }
       logger.log('All applications checked.')
     } catch (e) {
@@ -223,6 +224,14 @@ async function check (applicationId: string, cookie: string): Promise<void> {
         {
           name: 'Kerros',
           value: `${apt.floor}`
+        },
+        {
+          name: 'Asunnon numero',
+          value: `${apt.number}`
+        },
+        {
+          name: 'Rappu',
+          value: `${apt.stair}`
         },
         {
           name: 'Vuokra',
