@@ -41,3 +41,5 @@ npm ci
 node ./node_modules/typescript/bin/tsc
 node ./dist/bot.js
 ```
+
+Not affiliated with Domo or AYY.
