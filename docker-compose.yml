@@ -2,4 +2,6 @@ version: "3.9"
 services:
   bot:
     build: "bot"
+    volumes:
+      - "./bot/data:/usr/src/app/data"
 
