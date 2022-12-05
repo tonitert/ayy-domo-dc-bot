@@ -114,7 +114,8 @@ async function mainLoop (): Promise<void> {
       logger.error(e.stack)
     }
     let date = new Date()
-    if (Date.now() > date.setHours(checkTime.hours, checkTime.minutes)) {
+    date.setHours(checkTime.hours, checkTime.minutes, 0)
+    if (Date.now() > date.getTime()) {
       date = new Date(date.getTime() + 24 * 60 * 60 * 1000)
     }
     while (true) {
