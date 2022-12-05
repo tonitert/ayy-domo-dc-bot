@@ -52,26 +52,43 @@ if (process.env.DOMO_USERNAME === undefined ||
   process.env.DOMO_PASSWORD === undefined ||
   process.env.TIME === undefined ||
   process.env.CHANNEL_ID === undefined ||
-  process.env.APPLICATION_ID === undefined) throw new Error('Some environment variables not defined')
+  process.env.APPLICATION_IDS === undefined) throw new Error('Some environment variables not defined')
 
 const domoUsername = process.env.DOMO_USERNAME
 const domoPassword = process.env.DOMO_PASSWORD
 const timeString = process.env.TIME.split('.')
 const checkTime = new Time(Number(timeString[0]), Number(timeString[1]))
+const applicationIds = process.env.APPLICATION_IDS.split(',')
 
-let oldRanking: Ranking
+let oldRanking: {
+  [key: string]: Ranking
+} = {}
 
 void Promise.all([
   client.login(process.env.DISCORD_TOKEN),
-  new Promise((resolve) => {
-    fs.promises.readFile('./data/ranking.json').then((json) => {
-      oldRanking = JSON.parse(json.toString())
-      resolve(null)
-    }).catch((r) => {
-      if (r.code !== 'ENOENT') throw r
-      oldRanking = {}
-      resolve(null)
-    })
+  new Promise<void>((resolve) => {
+    fs.promises.mkdir('./data/ranking/', { recursive: true })
+      .then(async () => await fs.promises.readdir('./data/ranking'))
+      .then(async (filenames) => (await Promise.all(filenames.map(
+        async (filename) =>
+          filename.endsWith('.json')
+            ? {
+                filename,
+                content: await fs.promises.readFile(`./file/ranking/${filename}`)
+              }
+            : null))).filter(v => v !== null))
+      .then((files) => {
+        // can't be null
+        // @ts-expect-error
+        // eslint-disable-next-line no-return-assign
+        files.forEach(f => oldRanking[f.filename] = JSON.parse(f.content.toString()))
+        resolve()
+      })
+      .catch((r) => {
+        if (r.code !== 'ENOENT') throw r
+        oldRanking = {}
+        resolve()
+      })
   })
 ]).then(() => {
   // @ts-expect-error
@@ -83,9 +100,13 @@ async function mainLoop (): Promise<void> {
   while (true) {
     axiosInstance.defaults.headers['User-Agent'] = (await axiosInstance.get('https://jnrbsn.github.io/user-agents/user-agents.json')).data[0]
     try {
-      logger.log('Running check..')
-      await check()
-      logger.log('Check successfully completed.')
+      logger.log('Logging in.. ')
+      const cookie: string = await login()
+      for (const applicationId of applicationIds) {
+        logger.log(`Running check for application ${applicationId}`)
+        await check(applicationId, cookie)
+      }
+      logger.log('All applications checked.')
     } catch (e) {
       logger.error('Exception occurred during checking: ')
       logger.error(e)
@@ -133,10 +154,10 @@ function getSession (response: AxiosResponse): string {
   return `_campus_session=${response.headers['set-cookie'].match('(?<=^_campus_session=)([\\w%-]*)')[0]}`
 }
 
-async function check (): Promise<void> {
-  axiosInstance.defaults.headers.Cookie = await login()
+async function check (applicationId: string, cookie: string): Promise<void> {
+  axiosInstance.defaults.headers.Cookie = cookie
   await sleep(400)
-  const applicationPage = await axiosInstance.get(`https://domo.ayy.fi/applications/${process.env.APPLICATION_ID as string}`)
+  const applicationPage = await axiosInstance.get(`https://domo.ayy.fi/applications/${applicationId}`)
   axiosInstance.defaults.headers.Cookie = getSession(applicationPage)
   const $ = cheerio.load(applicationPage.data)
   const csrfToken = $('head > meta[name="csrf-token"]').attr('content')
@@ -147,25 +168,26 @@ async function check (): Promise<void> {
   axiosInstance.defaults.headers['X-CSRF-Token'] = csrfToken
 
   await sleep(400)
-  const application = await axiosInstance.get(`https://domo.ayy.fi/apartments/in_application/${process.env.APPLICATION_ID as string}?include_points=true`)
+  const application = await axiosInstance.get(`https://domo.ayy.fi/apartments/in_application/${applicationId}?include_points=true`)
 
   delete axiosInstance.defaults.headers['X-CSRF-Token']
   delete axiosInstance.defaults.headers['Content-Type']
   delete axiosInstance.defaults.headers.Accept
 
   const parsedResponse: { apartments: Apartment[] } = application.data
-  const ranking: Ranking = {}
+  const applicationRanking: Ranking = {}
+  const oldApplicationRanking: Ranking = oldRanking[applicationId] !== undefined ? oldRanking[applicationId] : {}
 
   function addApt (apartment): void {
-    ranking[apartment.apartment_type_id] = {
+    applicationRanking[apartment.apartment_type_id] = {
       rank: apartment.rank,
       bestRankId: apartment.id
     }
   }
 
   for (const apartment of parsedResponse.apartments) {
-    if (Object.prototype.hasOwnProperty.call(ranking, apartment.apartment_type_id) as boolean) {
-      const aptGroup = ranking[apartment.apartment_type_id]
+    if (Object.prototype.hasOwnProperty.call(applicationRanking, apartment.apartment_type_id) as boolean) {
+      const aptGroup = applicationRanking[apartment.apartment_type_id]
       if (apartment.rank < aptGroup.rank) {
         addApt(apartment)
       }
@@ -176,9 +198,9 @@ async function check (): Promise<void> {
 
   // @ts-expect-error
   const channel = await client.channels.fetch(process.env.CHANNEL_ID) as TextChannel
-  for (const queueId in ranking) {
-    const group = ranking[queueId]
-    const oldGroup = oldRanking[queueId]
+  for (const queueId in applicationRanking) {
+    const group = applicationRanking[queueId]
+    const oldGroup = oldApplicationRanking[queueId]
     if (oldGroup !== undefined && group.rank === oldGroup.rank) continue
     const apt = parsedResponse.apartments.find((apt) => apt.id === group.bestRankId)
     if (apt === undefined) continue
@@ -207,13 +229,13 @@ async function check (): Promise<void> {
           value: `${apt.humanized_rent}`
         }
       ])
-      .setURL(`https://domo.ayy.fi/applications/${process.env.APPLICATION_ID as string}`)
+      .setURL(`https://domo.ayy.fi/applications/${applicationId}`)
       .setImage(`https://domo.ayy.fi${apt.large_plan_image}`)
       .setTimestamp()
     await channel.send({ embeds: [embed] })
   }
-  oldRanking = ranking
-  await fs.promises.writeFile('./data/ranking.json', JSON.stringify(oldRanking))
+  oldRanking[applicationId] = applicationRanking
+  await fs.promises.writeFile(`./data/ranking/${applicationId}.json`, JSON.stringify(applicationRanking))
 }
 
 async function sleep (ms: number): Promise<unknown> {

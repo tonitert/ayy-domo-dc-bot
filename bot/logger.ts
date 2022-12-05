@@ -4,15 +4,15 @@ export default class Logger {
     return `[${date.toLocaleTimeString('fi-FI')}]`
   }
 
-  log (message: string): void {
-    console.log(`${Logger.getTimeString()} ${message}`)
+  log (...messages: string[]): void {
+    console.log(`${Logger.getTimeString()} ${messages.join(' ')}`)
   }
 
-  warn (message: string): void {
-    console.warn(`${Logger.getTimeString()} ${message}`)
+  warn (...messages: string[]): void {
+    console.warn(`${Logger.getTimeString()} ${messages.join(' ')}`)
   }
 
-  error (message: string): void {
-    console.error(`${Logger.getTimeString()} ${message}`)
+  error (...messages: string[]): void {
+    console.error(`${Logger.getTimeString()} ${messages.join(' ')}`)
   }
 }
