@@ -3,6 +3,7 @@
 A bot for notifying on a Discord channel when the ranking on a AYY Domo application has changed. 
 
 Example Discord notification (currently only in Finnish):
+
 ![img.png](./docs/img/dc_embed.png)
 
 ## Running the bot
