@@ -100,7 +100,7 @@ async function mainLoop (): Promise<void> {
   while (true) {
     axiosInstance.defaults.headers['User-Agent'] = (await axiosInstance.get('https://jnrbsn.github.io/user-agents/user-agents.json')).data[0]
     try {
-      logger.log('Logging in.. ')
+      logger.log('Logging in to Domo..')
       const cookie: string = await login()
       for (const applicationId of applicationIds) {
         logger.log(`Running check for application ${applicationId}`)
